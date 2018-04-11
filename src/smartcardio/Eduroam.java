@@ -1,5 +1,7 @@
 package smartcardio;
 
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import javax.smartcardio.CardException;
 
 public class Eduroam {
@@ -82,15 +84,27 @@ public class Eduroam {
     }
 
     public static void main(String[] args) {
-        try {
-            Eduroam eduroam = new Eduroam();
-            eduroam.writeEduroamUser("HenriManson5555");
-            System.err.println(eduroam.readEduroamUser());
-            eduroam.writeEduroamPassword("SuperGeheimWachtwoord");
-            System.err.println(eduroam.readEduroamPassword());
-            eduroam.teardown();
-        } catch (Exception e) {
-            System.err.println("Ouch: " + e.toString());
+        if (args.length != 2) {
+            try {
+                //System.err.println("Usage: " + Eduroam.class.getName() + " <user> <password>");
+                SmartcardIO smartcardIO = new SmartcardIO();
+                smartcardIO.setup();
+                smartcardIO.debug = true;
+                smartcardIO.readTelecomRecords(EF_EXT1);
+            } catch (CardException ex) {
+                Logger.getLogger(Eduroam.class.getName()).log(Level.SEVERE, null, ex);
+            }
+        } else {
+            try {
+                Eduroam eduroam = new Eduroam();
+                eduroam.writeEduroamUser(args[0]);
+                System.err.println(eduroam.readEduroamUser());
+                eduroam.writeEduroamPassword(args[1]);
+                System.err.println(eduroam.readEduroamPassword());
+                eduroam.teardown();
+            } catch (Exception e) {
+                System.err.println("Ouch: " + e.toString());
+            }
         }
     }
 }
