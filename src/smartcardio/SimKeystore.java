@@ -4,65 +4,122 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.security.Key;
-import java.security.KeyStore;
 import java.security.KeyStoreException;
 import java.security.KeyStoreSpi;
 import java.security.NoSuchAlgorithmException;
-import java.security.PrivateKey;
-import java.security.Provider;
-import java.security.Security;
 import java.security.UnrecoverableKeyException;
 import java.security.cert.Certificate;
 import java.security.cert.CertificateException;
+import java.security.cert.CertificateParsingException;
 import java.util.Date;
 import java.util.Enumeration;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import javax.smartcardio.Card;
+import javax.smartcardio.CardException;
+import javax.smartcardio.CardTerminal;
+import javax.smartcardio.CardTerminals;
+import javax.smartcardio.TerminalFactory;
+import org.opensc.pkcs15.application.Application;
+import org.opensc.pkcs15.application.ApplicationFactory;
+import org.opensc.pkcs15.asn1.PKCS15Certificate;
+import org.opensc.pkcs15.asn1.PKCS15Objects;
+import org.opensc.pkcs15.asn1.PKCS15PrivateKey;
+import org.opensc.pkcs15.asn1.PKCS15PublicKey;
+import org.opensc.pkcs15.asn1.attr.CommonObjectAttributes;
+import org.opensc.pkcs15.asn1.proxy.ReferenceProxy;
+import org.opensc.pkcs15.asn1.sequence.SequenceOf;
+import org.opensc.pkcs15.token.PathHelper;
+import org.opensc.pkcs15.token.Token;
+import org.opensc.pkcs15.token.TokenContext;
+import org.opensc.pkcs15.token.TokenFactory;
+import org.opensc.pkcs15.token.TokenPath;
 
 public class SimKeystore extends KeyStoreSpi {
-    private KeyStore ks;
+    private final static TerminalFactory terminalFactory = TerminalFactory.getDefault();
+    protected Card card;
+    private final static TokenFactory tokenFactory = TokenFactory.newInstance();
+    private final static ApplicationFactory applicationFactory = ApplicationFactory.newInstance();
+    private PKCS15Objects pkcs15objects;
+    private SequenceOf<PKCS15Certificate> pkcs15certificates;
+    private SequenceOf<PKCS15PublicKey> pkcs15publickeys;
+    private SequenceOf<PKCS15PrivateKey> pkcs15privatekeys;
+    private Set<String> aliases;
 
     public SimKeystore() {
         try {
-            Provider p = new sun.security.pkcs11.SunPKCS11("Configurations\\pkcs11.conf");
-            Security.addProvider(p);
-            Util.printProviders();
-            ks = KeyStore.getInstance("PKCS11");
-        } catch (KeyStoreException ex) {
+            CardTerminal terminal = null;
+            CardTerminals terminals = terminalFactory.terminals();
+            for (CardTerminal ct : terminals.list())
+            {
+                if (ct.isCardPresent())
+                {
+                    terminal = ct;
+                    break;
+                }
+            }
+            card = terminal.connect("*");
+            Token token = tokenFactory.newHardwareToken(card);
+            List<Application> apps = applicationFactory.listApplications(token);
+            Application app = apps.get(0);
+            PathHelper.selectDF(token, new TokenPath(app.getApplicationTemplate().getPath()));
+            token.selectEF(0x5031);
+            pkcs15objects = PKCS15Objects.readInstance(token.readEFData(),new TokenContext(token));
+            pkcs15certificates = pkcs15objects.getCertificates();
+            List<PKCS15Certificate> list = pkcs15certificates.getSequence();
+            aliases = new HashSet<>();
+            for (PKCS15Certificate pkcs15certificate : list) {
+                CommonObjectAttributes commonObjectAttributes = pkcs15certificate.getCommonObjectAttributes();
+                String label = commonObjectAttributes.getLabel();
+                aliases.add(label);
+            }
+            pkcs15publickeys = pkcs15objects.getPublicKeys();
+            pkcs15privatekeys = pkcs15objects.getPrivateKeys();
+        } catch (CardException ex) {
+            Logger.getLogger(SimKeystore.class.getName()).log(Level.SEVERE, null, ex);
+        } catch (IOException ex) {
             Logger.getLogger(SimKeystore.class.getName()).log(Level.SEVERE, null, ex);
         }
     }
 
     @Override
     public Key engineGetKey(String alias, char[] password) throws NoSuchAlgorithmException, UnrecoverableKeyException {
-        Key key = null;
-        try {
-            key = ks.getKey(alias, password);
-        } catch (KeyStoreException ex) {
-            Logger.getLogger(SimKeystore.class.getName()).log(Level.SEVERE, null, ex);
+        List<PKCS15PrivateKey> list = pkcs15privatekeys.getSequence();
+        for (PKCS15PrivateKey pkcs15privatekey : list) {
+            CommonObjectAttributes commonObjectAttributes = pkcs15privatekey.getCommonObjectAttributes();
+            String label = commonObjectAttributes.getLabel();
+            if (label.equals(alias)) {
+                return pkcs15privatekey.getSpecificPrivateKeyAttributes().getPrivateKeyObject();
+            }
         }
-        return new SimPrivateKey((PrivateKey) key);
-//        return key;
+        return null;
     }
 
     @Override
     public Certificate[] engineGetCertificateChain(String alias) {
         Certificate[] certificateChain = null;
-        try {
-            certificateChain = ks.getCertificateChain(alias);
-        } catch (KeyStoreException ex) {
-            Logger.getLogger(SimKeystore.class.getName()).log(Level.SEVERE, null, ex);
-        }
         return certificateChain;
     }
 
     @Override
     public Certificate engineGetCertificate(String alias) {
         Certificate certificate = null;
-        try {
-            certificate = ks.getCertificate(alias);
-        } catch (KeyStoreException ex) {
-            Logger.getLogger(SimKeystore.class.getName()).log(Level.SEVERE, null, ex);
+        List<PKCS15Certificate> list = pkcs15certificates.getSequence();
+        for (PKCS15Certificate pkcs15certificate : list) {
+            CommonObjectAttributes commonObjectAttributes = pkcs15certificate.getCommonObjectAttributes();
+            String label = commonObjectAttributes.getLabel();
+            if (label.equals(alias)) {
+                try {
+                    certificate = pkcs15certificate.getSpecificCertificateAttributes().getCertificateObject().getCertificate();
+                } catch (CertificateParsingException ex) {
+                    Logger.getLogger(SimKeystore.class.getName()).log(Level.SEVERE, null, ex);
+                }
+                break;
+            }
         }
         return certificate;
     }
@@ -70,112 +127,80 @@ public class SimKeystore extends KeyStoreSpi {
     @Override
     public Date engineGetCreationDate(String alias) {
         Date creationDate = null;
-        try {
-            creationDate = ks.getCreationDate(alias);
-        } catch (KeyStoreException ex) {
-            Logger.getLogger(SimKeystore.class.getName()).log(Level.SEVERE, null, ex);
-        }
         return creationDate;
     }
 
     @Override
     public void engineSetKeyEntry(String alias, Key key, char[] password, Certificate[] chain) throws KeyStoreException {
-        ks.setKeyEntry(alias, key, password, chain);
     }
 
     @Override
     public void engineSetKeyEntry(String alias, byte[] key, Certificate[] chain) throws KeyStoreException {
-        ks.setKeyEntry(alias, key, chain);
     }
 
     @Override
     public void engineSetCertificateEntry(String alias, Certificate cert) throws KeyStoreException {
-        ks.setCertificateEntry(alias, cert);
     }
 
     @Override
     public void engineDeleteEntry(String alias) throws KeyStoreException {
-        ks.deleteEntry(alias);
     }
 
     @Override
     public Enumeration<String> engineAliases() {
-        Enumeration<String> aliases = null;
-        try {
-            aliases = ks.aliases();
-        } catch (KeyStoreException ex) {
-            Logger.getLogger(SimKeystore.class.getName()).log(Level.SEVERE, null, ex);
-        }
-        return aliases;
+        return new Enumeration<String>() {
+            private final Iterator<String> iter = aliases.iterator();
+
+            @Override
+            public boolean hasMoreElements() {
+                return iter.hasNext();
+            }
+            @Override
+            public String nextElement() {
+                return iter.next();
+            }
+        };
     }
 
     @Override
     public boolean engineContainsAlias(String alias) {
-        boolean containsAlias = false;
-        try {
-            containsAlias = ks.containsAlias(alias);
-        } catch (KeyStoreException ex) {
-            Logger.getLogger(SimKeystore.class.getName()).log(Level.SEVERE, null, ex);
-        }
-        return containsAlias;
+        return aliases.contains(alias);
     }
 
     @Override
     public int engineSize() {
-        int size = 0;
-        try {
-            size = ks.size();
-        } catch (KeyStoreException ex) {
-            Logger.getLogger(SimKeystore.class.getName()).log(Level.SEVERE, null, ex);
-        }
-        return size;
+        return aliases.size();
     }
 
     @Override
     public boolean engineIsKeyEntry(String alias) {
         boolean isKeyEntry = false;
-        try {
-            isKeyEntry = ks.isKeyEntry(alias);
-        } catch (KeyStoreException ex) {
-            Logger.getLogger(SimKeystore.class.getName()).log(Level.SEVERE, null, ex);
-        }
         return isKeyEntry;
     }
 
     @Override
     public boolean engineIsCertificateEntry(String alias) {
         boolean isCertificateEntry = false;
-        try {
-            isCertificateEntry = ks.isCertificateEntry(alias);
-        } catch (KeyStoreException ex) {
-            Logger.getLogger(SimKeystore.class.getName()).log(Level.SEVERE, null, ex);
-        }
         return isCertificateEntry;
     }
 
     @Override
     public String engineGetCertificateAlias(Certificate cert) {
         String getCertificateAlias = null;
-        try {
-            getCertificateAlias = ks.getCertificateAlias(cert);
-        } catch (KeyStoreException ex) {
-            Logger.getLogger(SimKeystore.class.getName()).log(Level.SEVERE, null, ex);
-        }
         return getCertificateAlias;
     }
 
     @Override
     public void engineStore(OutputStream stream, char[] password) throws IOException, NoSuchAlgorithmException, CertificateException {
-        try {
-            ks.store(stream, password);
-        } catch (KeyStoreException ex) {
-            Logger.getLogger(SimKeystore.class.getName()).log(Level.SEVERE, null, ex);
-        }
     }
 
     @Override
     public void engineLoad(InputStream stream, char[] password) throws IOException, NoSuchAlgorithmException, CertificateException {
-        ks.load(stream, password);
+//        try {
+//            SmartcardIO.login(card.getBasicChannel(), new String(password).getBytes());
+//        } catch (CardException ex) {
+//            Logger.getLogger(SimKeystore.class.getName()).log(Level.SEVERE, null, ex);
+//        }
     }
 
 }

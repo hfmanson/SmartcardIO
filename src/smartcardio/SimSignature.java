@@ -11,6 +11,13 @@ import java.security.PrivateKey;
 import java.security.PublicKey;
 import java.security.SignatureException;
 import java.security.SignatureSpi;
+import java.security.interfaces.RSAPrivateKey;
+import org.bouncycastle.asn1.DERObject;
+import org.opensc.pkcs15.asn1.PKCS15Key;
+import org.opensc.pkcs15.asn1.PKCS15PrivateKey;
+import org.opensc.pkcs15.asn1.PKCS15RSAPrivateKey;
+import org.opensc.pkcs15.asn1.attr.RSAPrivateKeyObject;
+import org.opensc.pkcs15.asn1.proxy.ReferenceProxy;
 
 /**
  *
@@ -24,6 +31,16 @@ public class SimSignature extends SignatureSpi{
 
     @Override
     protected void engineInitSign(PrivateKey privateKey) throws InvalidKeyException {
+        if (privateKey instanceof RSAPrivateKeyObject) {
+            RSAPrivateKeyObject x = (RSAPrivateKeyObject) privateKey;
+            DERObject y = x.getDERObject();
+            ((ReferenceProxy<PKCS15PrivateKey>)privateKey).resolveEntity();
+
+//            PKCS15PrivateKey z = PKCS15PrivateKey.getInstance(y.toASN1Object());
+            System.out.println("OK: " + y);
+        } else {
+            throw new InvalidKeyException();
+        }
     }
 
     @Override

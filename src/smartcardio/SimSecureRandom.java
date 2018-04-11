@@ -15,31 +15,19 @@ import javax.smartcardio.CardException;
 import javax.smartcardio.CardTerminal;
 import javax.smartcardio.CommandAPDU;
 import javax.smartcardio.TerminalFactory;
-import static smartcardio.SmartcardIO.aid;
-import static smartcardio.SmartcardIO.runAPDU;
 
 public class SimSecureRandom extends SecureRandomSpi {
+    public final static byte[] AID_ISOAPPLET = { (byte) 0xF2, (byte) 0x76, (byte) 0xA2, (byte) 0x88, (byte) 0xBC, (byte) 0xFB, (byte) 0xA6, (byte) 0x9D, (byte) 0x34, (byte) 0xF3, (byte) 0x10, (byte) 0x01 };
     private CardChannel channel;
+    private SmartcardIO smartcardIO;
 
-    public SimSecureRandom() {
-        try {
-            // Display the list of terminals
-            TerminalFactory factory = TerminalFactory.getDefault();
-            List<CardTerminal> terminals = factory.terminals().list();
-            System.out.println("Terminals: " + terminals);
 
-            // Use the first terminal
-            CardTerminal terminal = terminals.get(0);
-
-            // Connect wit hthe card
-            Card card = terminal.connect("*");
-            System.out.println("card: " + card);
-            channel = card.getBasicChannel();
-        } catch (CardException ex) {
-            Logger.getLogger(SimSecureRandom.class.getName()).log(Level.SEVERE, null, ex);
-        }
-
+    public SimSecureRandom() throws CardException {
+        smartcardIO = new SmartcardIO();
+        smartcardIO.debug = true;
+        smartcardIO.setup();
     }
+
     @Override
     protected void engineSetSeed(byte[] seed) {
     }
@@ -56,12 +44,12 @@ public class SimSecureRandom extends SecureRandomSpi {
         byte[] data = null;
         try {
             // Send Select Applet command
-            CommandAPDU c = new CommandAPDU(0x00, 0xA4, 0x04, 0x00, aid);
-            runAPDU(channel, c);
+            CommandAPDU c = new CommandAPDU(0x00, 0xA4, 0x04, 0x00, AID_ISOAPPLET);
+            smartcardIO.runAPDU(c);
 
             // Send test command
             c = new CommandAPDU(0x00, 0x84, 0x00, 0x00, numBytes);
-            data = runAPDU(channel, c);
+            data = smartcardIO.runAPDU(c);
         } catch (CardException ex) {
             Logger.getLogger(SimSecureRandom.class.getName()).log(Level.SEVERE, null, ex);
         }

@@ -26,12 +26,12 @@ public class TestSSL {
     public static SSLSocketFactory hwKeyStore(String configName, char pin[]) {
         SSLSocketFactory sf = null;
         try {
-//            Provider p = new sun.security.pkcs11.SunPKCS11(configName);
-//            Security.addProvider(p);
-//            KeyStore ks = KeyStore.getInstance("PKCS11");
-            Provider p = new SimProvider();
+            Provider p = new sun.security.pkcs11.SunPKCS11(configName);
             Security.addProvider(p);
-            KeyStore ks = KeyStore.getInstance("SIM");
+            KeyStore ks = KeyStore.getInstance("PKCS11");
+//            Provider p = new SimProvider();
+//            Security.addProvider(p);
+//            KeyStore ks = KeyStore.getInstance("SIM");
             ks.load(null, pin);
             SSLContext sc = SSLContext.getInstance("TLS");
             KeyManagerFactory kmf = KeyManagerFactory.getInstance("SunX509");
