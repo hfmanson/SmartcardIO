@@ -16,6 +16,14 @@ public class SmartcardIO {
     private Card card;
     private CardChannel cardChannel;
 
+    public static byte hi(int x) {
+        return (byte) (x >> 8);
+    }
+
+    public static byte lo(int x) {
+        return (byte) (x & 0xff);
+    }
+
     public byte[] runAPDU(CommandAPDU c) throws CardException {
         if (debug) {
             System.out.print("command: CLA: " + Util.hex2(c.getCLA()) + ", INS: " + Util.hex2(c.getINS()) + ", P1: " + Util.hex2(c.getP1()) + ", P2: " + Util.hex2(c.getP2()));
@@ -64,7 +72,11 @@ public class SmartcardIO {
         // Connect wit hthe card
         card = terminal.connect("*");
         if (debug) {
-            System.out.println("card: " + card);
+            System.out.print("card: " + card + ", ATR: ");
+            Util.printHex(card.getATR().getBytes());
+            //System.out.print(", Historical: ");
+            //Util.printHex(card.getATR().getHistoricalBytes());
+            System.out.println();
         }
         cardChannel = card.getBasicChannel();
     }
@@ -80,6 +92,21 @@ public class SmartcardIO {
 
     public Card getCard() {
         return card;
+    }
+
+    public byte[] selectAID(byte aid[]) throws CardException {
+        CommandAPDU c = new CommandAPDU(0x00, 0xA4, 0x04, 0x00, aid);
+        return runAPDU(c);
+    }
+
+    public byte[] readBinary() throws CardException {
+        CommandAPDU c = new CommandAPDU(0x00, 0xB0, 0x00, 0x00, 0x100);
+        return runAPDU(c);
+    }
+
+    public byte[] updateBinary(byte data[]) throws CardException {
+        CommandAPDU c = new CommandAPDU(0x00, 0xD6, 0x00, 0x00, data);
+        return runAPDU(c);
     }
 
     public byte[] readRecord(int record) throws CardException {
@@ -98,39 +125,23 @@ public class SmartcardIO {
         runAPDU(c);
     }
 
-    public static byte hi(int x) {
-        return (byte) (x >> 8);
-    }
-
-    public static byte lo(int x) {
-        return (byte) (x & 0xff);
-    }
-
-    public byte[] selectTelecom(int fid) throws CardException {
-        CommandAPDU c = new CommandAPDU(0x00, 0xA4, 0x08, 0x0c, new byte[] { 0x7f, 0x10, hi(fid), lo(fid) });
+    public byte[] createFile(int fid) throws CardException {
+        CommandAPDU c = new CommandAPDU(0x00, 0xE0, 0x00, 0x00, new byte[] {
+            0x6f,
+            0x15,
+                (byte) 0x81,
+                0x02,
+                    0x00, 0x40,
+                (byte) 0x82,
+                0x01,
+                    0x01,
+                (byte) 0x83,
+                0x02,
+                    hi(fid), lo(fid),
+                (byte) 0x86,
+                0x08,
+                    (byte) 0xFF, (byte) 0x90, (byte) 0xFF, (byte) 0xFF, (byte) 0xFF, (byte) 0xFF, (byte) 0x90, (byte) 0x00
+        });
         return runAPDU(c);
-    }
-
-    public byte[] readTelecomRecord(int fid, int record) throws CardException {
-        byte result[] = null;
-        if (selectTelecom(fid) != null) {
-            System.out.println(String.format("reading telecom %04X", fid));
-            result = readRecord(record);
-        }
-        return result;
-    }
-
-    public void readTelecomRecords(int fid) throws CardException {
-        if (selectTelecom(fid) != null) {
-            System.out.println(String.format("reading telecom %04X", fid));
-            readRecords();
-        }
-    }
-
-    public void writeTelecom(int fid, int record, byte[] data) throws CardException {
-        if (selectTelecom(fid) != null) {
-            System.out.println(String.format("write telecom %04X, record %d", fid, record));
-            updateRecord(record, data);
-        }
     }
 }

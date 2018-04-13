@@ -3,13 +3,13 @@ package smartcardio;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.smartcardio.CardException;
+import javax.smartcardio.CommandAPDU;
 
 public class Eduroam {
-    public final static int EXT_RECORD_SIZE = 13;
-    public final static int EF_EXT1 = 0x6F4A;
-    public final static int EF_EXT2 = 0x6F4B;
-    public final static int RECORD_USER = 1;
-    public final static int RECORD_PASSWORD = 3;
+    public final static int OFFSET_USER = 0x00;
+    public final static int OFFSET_PASSWORD = 0x20;
+    public final static int FID_EDUROAM = 0x1000;
+    public final static byte[] AID_ISOAPPLET = { (byte) 0xF2, (byte) 0x76, (byte) 0xA2, (byte) 0x88, (byte) 0xBC, (byte) 0xFB, (byte) 0xA6, (byte) 0x9D, (byte) 0x34, (byte) 0xF3, (byte) 0x10, (byte) 0x01 };
 
     private final SmartcardIO smartcardIO;
 
@@ -17,94 +17,93 @@ public class Eduroam {
         smartcardIO = new SmartcardIO();
         smartcardIO.debug = true;
         smartcardIO.setup();
+        smartcardIO.selectAID(AID_ISOAPPLET);
     }
 
     public void teardown() {
         smartcardIO.teardown();
     }
-    // convert data to bytes 0,(data bytes) padded with 0xFF
-    public static byte[] createExtRecord(String data) {
-        byte result[] = new byte[EXT_RECORD_SIZE];
-        result[0] = 0;
-        byte barr[] = data.getBytes();
-        int length = barr.length;
-        if (length > EXT_RECORD_SIZE - 1) {
-            length = EXT_RECORD_SIZE - 1;
-        }
-        System.arraycopy(barr, 0, result, 1, length);
-        for (int i = length + 1; i < EXT_RECORD_SIZE; i++) {
-            result[i] = (byte) 0xFF;
+
+    public byte[] login(byte password[]) throws CardException {
+        return smartcardIO.login(password);
+    }
+
+    public byte[] selectEduroam() throws CardException {
+        CommandAPDU c = new CommandAPDU(0x00, 0xA4, 0x00, 0x00, new byte[] { 0x10, 0x00});
+        return smartcardIO.runAPDU(c);
+    }
+
+    public byte[] createEduroam() throws CardException {
+        return smartcardIO.createFile(FID_EDUROAM);
+    }
+
+    public byte[] readEduroam() throws CardException {
+        byte result[] = null;
+        if (selectEduroam() != null) {
+            System.out.println("reading eduroam");
+            result = smartcardIO.readBinary();
         }
         return result;
     }
 
-    public void writeData(int ext, int recordnr, String data) throws CardException {
-        int beginIndex = 0;
-        int length;
-        while ((length = data.length() - beginIndex) > 0)
-        {
-            if (length > EXT_RECORD_SIZE - 1) {
-                length = EXT_RECORD_SIZE - 1;
-            }
-            int endIndex = beginIndex + length;
-            smartcardIO.writeTelecom(ext, recordnr++, createExtRecord(data.substring(beginIndex, endIndex)) );
-            beginIndex = endIndex;
+    public boolean updateEduroam(byte[] data) throws CardException {
+        boolean result = false;
+        if (selectEduroam() != null) {
+            System.out.println("updating eduroam");
+            result = smartcardIO.updateBinary(data) != null;
+        }
+        return result;
+    }
+
+    public static void copyStringToByteArray(byte[] barr, int offset, String s) {
+        for (int i = 0; i < s.length(); i++) {
+            barr[offset + i] = (byte) s.charAt(i);
         }
     }
 
-    public String readData(int ext, int recordnr) throws CardException {
+    public static String readStringFromByteArray(byte[] barr, int offset) {
         String result = "";
-        byte record[];
-        while ((record = smartcardIO.readTelecomRecord(ext, recordnr++)) != null) {
-            for (int i = 1; i < EXT_RECORD_SIZE; i++) {
-                int val = (record[i] & 0xFF);
-                if (val == 0xFF) {
-                    return result;
-                }
-                result += String.valueOf((char) val);
-            }
+        byte b;
+        int i = offset;
+        while ((b = barr[i++]) != (byte) 0xFF) {
+            result += (char) b;
         }
         return result;
-    }
-
-    public void writeEduroamUser(String user) throws CardException {
-        writeData(EF_EXT1, RECORD_USER, user);
-    }
-
-    public void writeEduroamPassword(String password) throws CardException {
-        writeData(EF_EXT1, RECORD_PASSWORD, password);
-    }
-
-    public String readEduroamUser() throws CardException {
-        return readData(EF_EXT1, RECORD_USER);
-    }
-
-    public String readEduroamPassword() throws CardException {
-        return readData(EF_EXT1, RECORD_PASSWORD);
     }
 
     public static void main(String[] args) {
-        if (args.length != 2) {
-            try {
-                //System.err.println("Usage: " + Eduroam.class.getName() + " <user> <password>");
-                SmartcardIO smartcardIO = new SmartcardIO();
-                smartcardIO.setup();
-                smartcardIO.debug = true;
-                smartcardIO.readTelecomRecords(EF_EXT1);
-            } catch (CardException ex) {
-                Logger.getLogger(Eduroam.class.getName()).log(Level.SEVERE, null, ex);
+        try {
+            Eduroam eduroam = new Eduroam();
+            byte data[];
+            if (args.length >= 2) {
+                data = new byte[64];
+                for (int i = 0; i < data.length; i++) {
+                    data[i] = (byte) 0xFF;
+                }
+                Eduroam.copyStringToByteArray(data, OFFSET_USER, args[0]);
+                Eduroam.copyStringToByteArray(data, OFFSET_PASSWORD, args[1]);
+                if (args.length == 3) {
+                    eduroam.login(args[2].getBytes());
+                }
+                if (eduroam.selectEduroam() == null) {
+                    eduroam.createEduroam();
+                }
+                if (!eduroam.updateEduroam(data)) {
+                    System.err.println("Error updating eduroam data");
+                    return;
+                }
             }
-        } else {
-            try {
-                Eduroam eduroam = new Eduroam();
-                eduroam.writeEduroamUser(args[0]);
-                System.err.println(eduroam.readEduroamUser());
-                eduroam.writeEduroamPassword(args[1]);
-                System.err.println(eduroam.readEduroamPassword());
-                eduroam.teardown();
-            } catch (Exception e) {
-                System.err.println("Ouch: " + e.toString());
+            data = eduroam.readEduroam();
+            if (data != null) {
+                String user = Eduroam.readStringFromByteArray(data, OFFSET_USER);
+                String password = Eduroam.readStringFromByteArray(data, OFFSET_PASSWORD);
+                System.out.println("user: " + user);
+                System.out.println("password: " + password);
+            } else {
+                System.err.println("No credentials found");
             }
+        } catch (CardException ex) {
+            Logger.getLogger(Eduroam.class.getName()).log(Level.SEVERE, null, ex);
         }
     }
 }
