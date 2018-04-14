@@ -86,6 +86,7 @@ public class Eduroam {
                     eduroam.login(args[2].getBytes());
                 }
                 if (eduroam.selectEduroam() == null) {
+                    System.out.println("FID 0x" + String.format("%04X", FID_EDUROAM) + " not present, creating...");
                     eduroam.createEduroam();
                 }
                 if (!eduroam.updateEduroam(data)) {
