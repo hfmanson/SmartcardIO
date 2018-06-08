@@ -4,6 +4,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.smartcardio.CardException;
 import javax.smartcardio.CommandAPDU;
+import javax.smartcardio.ResponseAPDU;
 
 public class Telecom {
     public final static int EXT_RECORD_SIZE = 13;
@@ -40,18 +41,18 @@ public class Telecom {
         return result;
     }
 
-    public byte[] selectTelecom(int fid) throws CardException {
+    public ResponseAPDU selectTelecom(int fid) throws CardException {
         CommandAPDU c = new CommandAPDU(0x00, 0xA4, 0x08, 0x0c, new byte[] { 0x7f, 0x10, SmartcardIO.hi(fid), SmartcardIO.lo(fid) });
         return smartcardIO.runAPDU(c);
     }
 
-    public byte[] readTelecomRecord(int fid, int record) throws CardException {
-        byte result[] = null;
-        if (selectTelecom(fid) != null) {
+    public ResponseAPDU readTelecomRecord(int fid, int record) throws CardException {
+        ResponseAPDU responseAPDU = selectTelecom(fid);
+        if (responseAPDU.getSW() == SmartcardIO.SW_NO_ERROR) {
             System.out.println(String.format("reading telecom %04X", fid));
-            result = smartcardIO.readRecord(record);
+            responseAPDU = smartcardIO.readRecord(record);
         }
-        return result;
+        return responseAPDU;
     }
 
     public void readTelecomRecords(int fid) throws CardException {
@@ -83,8 +84,9 @@ public class Telecom {
 
     public String readData(int ext, int recordnr) throws CardException {
         String result = "";
-        byte record[];
-        while ((record = readTelecomRecord(ext, recordnr++)) != null) {
+        ResponseAPDU responseAPDU;
+        while ((responseAPDU = readTelecomRecord(ext, recordnr++)).getSW() == SmartcardIO.SW_NO_ERROR) {
+            byte record[] = responseAPDU.getData();
             for (int i = 1; i < EXT_RECORD_SIZE; i++) {
                 int val = (record[i] & 0xFF);
                 if (val == 0xFF) {

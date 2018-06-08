@@ -5,6 +5,7 @@
  */
 package smartcardio;
 
+import javax.smartcardio.CardException;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
@@ -44,9 +45,10 @@ public class SimSecureRandomTest {
 
     /**
      * Test of engineSetSeed method, of class SimSecureRandom.
+     * @throws javax.smartcardio.CardException
      */
     @Test
-    public void testEngineSetSeed() {
+    public void testEngineSetSeed() throws CardException {
         System.out.println("engineSetSeed");
         byte[] seed = null;
         SimSecureRandom instance = new SimSecureRandom();
@@ -55,9 +57,10 @@ public class SimSecureRandomTest {
 
     /**
      * Test of engineNextBytes method, of class SimSecureRandom.
+     * @throws javax.smartcardio.CardException
      */
     @Test
-    public void testEngineNextBytes() {
+    public void testEngineNextBytes() throws CardException {
         System.out.println("engineNextBytes");
         byte[] bytes = new byte[32];
         SimSecureRandom instance = new SimSecureRandom();
@@ -67,9 +70,10 @@ public class SimSecureRandomTest {
 
     /**
      * Test of engineGenerateSeed method, of class SimSecureRandom.
+     * @throws javax.smartcardio.CardException
      */
     @Test
-    public void testEngineGenerateSeed() {
+    public void testEngineGenerateSeed() throws CardException {
         System.out.println("engineGenerateSeed");
         int numBytes = 32;
         SimSecureRandom instance = new SimSecureRandom();

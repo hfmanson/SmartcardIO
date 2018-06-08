@@ -13,6 +13,7 @@ import javax.smartcardio.TerminalFactory;
 
 public class SmartcardIO {
     public boolean debug = false;
+    public static final int SW_NO_ERROR = 0x9000;
     private Card card;
     private CardChannel cardChannel;
 
@@ -24,7 +25,7 @@ public class SmartcardIO {
         return (byte) (x & 0xff);
     }
 
-    public byte[] runAPDU(CommandAPDU c) throws CardException {
+    public ResponseAPDU runAPDU(CommandAPDU c) throws CardException {
         if (debug) {
             System.out.print("command: CLA: " + Util.hex2(c.getCLA()) + ", INS: " + Util.hex2(c.getINS()) + ", P1: " + Util.hex2(c.getP1()) + ", P2: " + Util.hex2(c.getP2()));
             int nc = c.getNc();
@@ -47,14 +48,14 @@ public class SmartcardIO {
         } else {
             System.out.println("ERROR: status: " + String.format("%04X", status));
         }
-        return data;
+        return answer;
     }
 
-    public byte[] login(byte[] password) throws CardException {
+    public ResponseAPDU login(byte[] password) throws CardException {
         return runAPDU(new CommandAPDU(0x00, 0x20, 0x00, 0x01, password));
     }
 
-    public byte[] generaterandom() throws CardException {
+    public ResponseAPDU generaterandom() throws CardException {
         return runAPDU(new CommandAPDU(0x00, 0x84, 0x00, 0x00, 0x10));
     }
 
@@ -65,20 +66,24 @@ public class SmartcardIO {
         if (debug) {
             System.out.println("Terminals: " + terminals);
         }
+        if (terminals.size() > 0) {
+            // Use the first terminal
+            CardTerminal terminal = terminals.get(0);
 
-        // Use the first terminal
-        CardTerminal terminal = terminals.get(0);
-
-        // Connect wit hthe card
-        card = terminal.connect("*");
-        if (debug) {
-            System.out.print("card: " + card + ", ATR: ");
-            Util.printHex(card.getATR().getBytes());
-            //System.out.print(", Historical: ");
-            //Util.printHex(card.getATR().getHistoricalBytes());
-            System.out.println();
+            // Connect wit hthe card
+            card = terminal.connect("*");
+            if (debug) {
+                System.out.print("card: " + card + ", ATR: ");
+                Util.printHex(card.getATR().getBytes());
+                //System.out.print(", Historical: ");
+                //Util.printHex(card.getATR().getHistoricalBytes());
+                System.out.println();
+            }
+            cardChannel = card.getBasicChannel();
+        } else {
+            System.err.println("No terminals");
+            System.exit(1);
         }
-        cardChannel = card.getBasicChannel();
     }
 
     public void teardown() {
@@ -94,22 +99,22 @@ public class SmartcardIO {
         return card;
     }
 
-    public byte[] selectAID(byte aid[]) throws CardException {
+    public ResponseAPDU selectAID(byte aid[]) throws CardException {
         CommandAPDU c = new CommandAPDU(0x00, 0xA4, 0x04, 0x00, aid);
         return runAPDU(c);
     }
 
-    public byte[] readBinary() throws CardException {
+    public ResponseAPDU readBinary() throws CardException {
         CommandAPDU c = new CommandAPDU(0x00, 0xB0, 0x00, 0x00, 0x100);
         return runAPDU(c);
     }
 
-    public byte[] updateBinary(byte data[]) throws CardException {
+    public ResponseAPDU updateBinary(byte data[]) throws CardException {
         CommandAPDU c = new CommandAPDU(0x00, 0xD6, 0x00, 0x00, data);
         return runAPDU(c);
     }
 
-    public byte[] readRecord(int record) throws CardException {
+    public ResponseAPDU readRecord(int record) throws CardException {
         CommandAPDU c = new CommandAPDU(0x00, 0xB2, record, 0x04, 0x100);
         return runAPDU(c);
     }
@@ -125,7 +130,7 @@ public class SmartcardIO {
         runAPDU(c);
     }
 
-    public byte[] createFile(int fid) throws CardException {
+    public ResponseAPDU createFile(int fid) throws CardException {
         CommandAPDU c = new CommandAPDU(0x00, 0xE0, 0x00, 0x00, new byte[] {
             0x6f,
             0x15,
@@ -140,7 +145,7 @@ public class SmartcardIO {
                     hi(fid), lo(fid),
                 (byte) 0x86,
                 0x08,
-                    (byte) 0xFF, (byte) 0x90, (byte) 0xFF, (byte) 0xFF, (byte) 0xFF, (byte) 0xFF, (byte) 0x90, (byte) 0x00
+                    (byte) 0xFF, (byte) 0x90, (byte) 0xFF, (byte) 0xFF, (byte) 0xFF, (byte) 0xFF, (byte) 0x90, (byte) 0x90
         });
         return runAPDU(c);
     }

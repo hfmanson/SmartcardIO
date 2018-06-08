@@ -14,6 +14,7 @@ import javax.smartcardio.CardChannel;
 import javax.smartcardio.CardException;
 import javax.smartcardio.CardTerminal;
 import javax.smartcardio.CommandAPDU;
+import javax.smartcardio.ResponseAPDU;
 import javax.smartcardio.TerminalFactory;
 
 public class SimSecureRandom extends SecureRandomSpi {
@@ -45,11 +46,16 @@ public class SimSecureRandom extends SecureRandomSpi {
         try {
             // Send Select Applet command
             CommandAPDU c = new CommandAPDU(0x00, 0xA4, 0x04, 0x00, AID_ISOAPPLET);
-            smartcardIO.runAPDU(c);
+            ResponseAPDU response = smartcardIO.runAPDU(c);
+            if (response.getSW() == SmartcardIO.SW_NO_ERROR) {
+                // Send test command
+                c = new CommandAPDU(0x00, 0x84, 0x00, 0x00, numBytes);
+                response = smartcardIO.runAPDU(c);
+                if (response.getSW() == SmartcardIO.SW_NO_ERROR) {
+                    data = response.getData();
+                }
 
-            // Send test command
-            c = new CommandAPDU(0x00, 0x84, 0x00, 0x00, numBytes);
-            data = smartcardIO.runAPDU(c);
+            }
         } catch (CardException ex) {
             Logger.getLogger(SimSecureRandom.class.getName()).log(Level.SEVERE, null, ex);
         }

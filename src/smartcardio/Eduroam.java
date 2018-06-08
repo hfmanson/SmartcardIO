@@ -4,6 +4,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.smartcardio.CardException;
 import javax.smartcardio.CommandAPDU;
+import javax.smartcardio.ResponseAPDU;
 
 public class Eduroam {
     public final static int OFFSET_USER = 0x00;
@@ -24,33 +25,34 @@ public class Eduroam {
         smartcardIO.teardown();
     }
 
-    public byte[] login(byte password[]) throws CardException {
+    public ResponseAPDU login(byte password[]) throws CardException {
         return smartcardIO.login(password);
     }
 
-    public byte[] selectEduroam() throws CardException {
+    public ResponseAPDU selectEduroam() throws CardException {
         CommandAPDU c = new CommandAPDU(0x00, 0xA4, 0x00, 0x00, new byte[] { 0x10, 0x00});
         return smartcardIO.runAPDU(c);
     }
 
-    public byte[] createEduroam() throws CardException {
+    public ResponseAPDU createEduroam() throws CardException {
         return smartcardIO.createFile(FID_EDUROAM);
     }
 
-    public byte[] readEduroam() throws CardException {
-        byte result[] = null;
-        if (selectEduroam() != null) {
+    public ResponseAPDU readEduroam() throws CardException {
+        ResponseAPDU responseAPDU = selectEduroam();
+        if (responseAPDU.getSW() == SmartcardIO.SW_NO_ERROR) {
             System.out.println("reading eduroam");
-            result = smartcardIO.readBinary();
+            responseAPDU = smartcardIO.readBinary();
         }
-        return result;
+        return responseAPDU;
     }
 
     public boolean updateEduroam(byte[] data) throws CardException {
         boolean result = false;
-        if (selectEduroam() != null) {
+        ResponseAPDU responseAPDU = selectEduroam();
+        if (responseAPDU.getSW() == SmartcardIO.SW_NO_ERROR) {
             System.out.println("updating eduroam");
-            result = smartcardIO.updateBinary(data) != null;
+            result = smartcardIO.updateBinary(data).getSW() == SmartcardIO.SW_NO_ERROR;
         }
         return result;
     }
@@ -82,20 +84,29 @@ public class Eduroam {
                 }
                 Eduroam.copyStringToByteArray(data, OFFSET_USER, args[0]);
                 Eduroam.copyStringToByteArray(data, OFFSET_PASSWORD, args[1]);
+                ResponseAPDU responseAPDU = null;
                 if (args.length == 3) {
                     eduroam.login(args[2].getBytes());
                 }
-                if (eduroam.selectEduroam() == null) {
+                responseAPDU = eduroam.selectEduroam();
+                if (responseAPDU.getSW() != SmartcardIO.SW_NO_ERROR) {
                     System.out.println("FID 0x" + String.format("%04X", FID_EDUROAM) + " not present, creating...");
-                    eduroam.createEduroam();
+                    responseAPDU = eduroam.createEduroam();
+                    if (responseAPDU.getSW() != SmartcardIO.SW_NO_ERROR) {
+                        System.err.println("Error creating FID 0x" + String.format("%04X", FID_EDUROAM));
+                        return;
+                    }
                 }
                 if (!eduroam.updateEduroam(data)) {
                     System.err.println("Error updating eduroam data");
                     return;
                 }
+            } else if (args.length == 1) {
+                eduroam.login(args[0].getBytes());
             }
-            data = eduroam.readEduroam();
-            if (data != null) {
+            ResponseAPDU responseAPDU = eduroam.readEduroam();
+            if (responseAPDU.getSW() == SmartcardIO.SW_NO_ERROR) {
+                data = responseAPDU.getData();
                 String user = Eduroam.readStringFromByteArray(data, OFFSET_USER);
                 String password = Eduroam.readStringFromByteArray(data, OFFSET_PASSWORD);
                 System.out.println("user: " + user);

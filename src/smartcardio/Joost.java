@@ -2,13 +2,13 @@ package smartcardio;
 
 import javax.smartcardio.CardException;
 import javax.smartcardio.CommandAPDU;
+import javax.smartcardio.ResponseAPDU;
 
 public class Joost {
     public final static byte[] AID_ISOAPPLET = { (byte) 0xF2, (byte) 0x76, (byte) 0xA2, (byte) 0x88, (byte) 0xBC, (byte) 0xFB, (byte) 0xA6, (byte) 0x9D, (byte) 0x34, (byte) 0xF3, (byte) 0x10, (byte) 0x01 };
-    public final static byte[] AID_HELLOAPPLET = { (byte) 0xA0, 0x00, 0x00, 0x00, 0x62, 0x03, 0x01, 0x0C, 0x06, 0x01 };
     public final static byte[] AID_JOOSTAPPLET = { (byte) 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x01 };
 
-    public static void joost(SmartcardIO smartcardIO) throws CardException {
+    public static void priegel(SmartcardIO smartcardIO) throws CardException {
 
         // Send Select Applet command
         CommandAPDU c = new CommandAPDU(0x00, 0xA4, 0x04, 0x00, AID_ISOAPPLET);
@@ -34,6 +34,16 @@ public class Joost {
             smartcardIO.runAPDU(c);
             //c = new CommandAPDU(0x00, 0xA4, 0x03, 0x00, 0x100);
             //smartcardIO.runAPDU(c);
+        }
+    }
+    public static void joost(SmartcardIO smartcardIO) throws CardException {
+
+        // Send Select Applet command
+        CommandAPDU c = new CommandAPDU(0x00, 0xA4, 0x04, 0x00, AID_JOOSTAPPLET);
+        ResponseAPDU responseAPDU = smartcardIO.runAPDU(c);
+        if (responseAPDU.getSW() == SmartcardIO.SW_NO_ERROR) {
+            c = new CommandAPDU(0x80, 0x00, 0x00, 0x00, 0x100);
+            responseAPDU = smartcardIO.runAPDU(c);
         }
     }
 
