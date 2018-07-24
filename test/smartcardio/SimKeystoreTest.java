@@ -10,6 +10,8 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.security.Key;
 import java.security.NoSuchAlgorithmException;
+import java.security.PrivateKey;
+import java.security.PublicKey;
 import java.security.cert.Certificate;
 import java.security.cert.CertificateException;
 import java.util.ArrayList;
@@ -69,6 +71,7 @@ public class SimKeystoreTest {
     @Test
     public void testEngineGetKey() throws Exception {
         System.out.println("engineGetKey");
+        PrivateKey key  = (PrivateKey) instance.engineGetKey("Certificate", null);
 //        String alias = "";
 //        char[] password = null;
 //        SimKeystore instance = new SimKeystore();
@@ -76,7 +79,7 @@ public class SimKeystoreTest {
 //        Key result = instance.engineGetKey(alias, password);
 //        assertEquals(expResult, result);
 //        // TODO review the generated test code and remove the default call to fail.
-//        fail("The test case is a prototype.");
+        fail("The test case is a prototype.");
     }
 
     /**
@@ -99,14 +102,13 @@ public class SimKeystoreTest {
      */
     @Test
     public void testEngineGetCertificate() {
-//        System.out.println("engineGetCertificate");
-//        String alias = "";
-//        SimKeystore instance = new SimKeystore();
-//        Certificate expResult = null;
-//        Certificate result = instance.engineGetCertificate(alias);
+        System.out.println("engineGetCertificate");
+        String alias = "Certificate";
+        Certificate result = instance.engineGetCertificate(alias);
+        PublicKey publicKey = result.getPublicKey();
 //        assertEquals(expResult, result);
 //        // TODO review the generated test code and remove the default call to fail.
-//        fail("The test case is a prototype.");
+        fail("The test case is a prototype.");
     }
 
     /**

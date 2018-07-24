@@ -69,7 +69,10 @@ public class SmartcardIO {
         if (terminals.size() > 0) {
             // Use the first terminal
             CardTerminal terminal = terminals.get(0);
-
+            if (debug) {
+                System.out.println("Waiting for card presence...");
+            }
+            terminal.waitForCardPresent(0);
             // Connect wit hthe card
             card = terminal.connect("*");
             if (debug) {
