@@ -15,6 +15,7 @@ import java.security.SignatureException;
 import java.security.UnrecoverableKeyException;
 import java.security.cert.Certificate;
 import java.security.cert.CertificateException;
+import java.security.cert.X509Certificate;
 import java.security.interfaces.RSAPrivateKey;
 import java.security.interfaces.RSAPublicKey;
 import java.util.Enumeration;
@@ -22,6 +23,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import javax.xml.bind.DatatypeConverter;
 
 public class SimProvider extends Provider {
     public SimProvider() {
@@ -73,24 +75,28 @@ public class SimProvider extends Provider {
             //Util.printProviders();
             KeyStore ks = KeyStore.getInstance("SIM");
             ks.load(null, new char[] { '1', '2', '3', '4' });
-            System.out.println(ks);
+            System.out.println(ks.getType());
             Enumeration<String> aliases = ks.aliases();
             while (aliases.hasMoreElements()) {
                 String alias = aliases.nextElement();
                 System.out.println("alias: " + alias);
+                Certificate certificate = ks.getCertificate(alias);
+                X509Certificate x509 = (X509Certificate) certificate;
+                byte[] thumbprint = LoyalityCard.getThumbprint(x509);
+                String digestHex = DatatypeConverter.printHexBinary(thumbprint);
+                System.out.println(digestHex);
+                System.out.println(certificate.getPublicKey());
             }
-            System.out.println(ks.containsAlias("Certificate"));
+            System.out.println(ks.containsAlias("sim923"));
             System.out.println(ks.containsAlias("larie"));
             System.out.println(ks.size());
-            Certificate certificate = ks.getCertificate("Certificate");
-            System.out.println(certificate.getPublicKey());
-            RSAPrivateKey privatekey = (RSAPrivateKey) ks.getKey("Private Key", null);
-            System.out.println(privatekey.toString());
-            Signature s = Signature.getInstance("SHA256withRSA", p);
-            s.initSign(privatekey);
-            byte buf[] = new byte[] { 0x48, 0x45, 0x4e, 0x52, 0x49 };
-            s.update(buf);
-            s.sign();
+            //RSAPrivateKey privatekey = (RSAPrivateKey) ks.getKey("Private Key", null);
+            //System.out.println(privatekey.toString());
+            //Signature s = Signature.getInstance("SHA256withRSA", p);
+            //s.initSign(privatekey);
+            //byte buf[] = new byte[] { 0x48, 0x45, 0x4e, 0x52, 0x49 };
+            //s.update(buf);
+            //s.sign();
         } catch (KeyStoreException ex) {
             Logger.getLogger(SimProvider.class.getName()).log(Level.SEVERE, null, ex);
         } catch (IOException ex) {
@@ -99,12 +105,12 @@ public class SimProvider extends Provider {
             Logger.getLogger(SimProvider.class.getName()).log(Level.SEVERE, null, ex);
         } catch (CertificateException ex) {
             Logger.getLogger(SimProvider.class.getName()).log(Level.SEVERE, null, ex);
-        } catch (UnrecoverableKeyException ex) {
-            Logger.getLogger(SimProvider.class.getName()).log(Level.SEVERE, null, ex);
-        } catch (InvalidKeyException ex) {
-            Logger.getLogger(SimProvider.class.getName()).log(Level.SEVERE, null, ex);
-        } catch (SignatureException ex) {
-            Logger.getLogger(SimProvider.class.getName()).log(Level.SEVERE, null, ex);
+//        } catch (UnrecoverableKeyException ex) {
+//            Logger.getLogger(SimProvider.class.getName()).log(Level.SEVERE, null, ex);
+//        } catch (InvalidKeyException ex) {
+//            Logger.getLogger(SimProvider.class.getName()).log(Level.SEVERE, null, ex);
+//        } catch (SignatureException ex) {
+//            Logger.getLogger(SimProvider.class.getName()).log(Level.SEVERE, null, ex);
         }
 
     }
