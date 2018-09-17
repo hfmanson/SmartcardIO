@@ -18,7 +18,7 @@ public class Telecom {
         smartcardIO = new SmartcardIO();
         smartcardIO.debug = true;
         smartcardIO.setup();
-        smartcardIO.login(new byte[] { 0x31, 0x32, 0x33, 0x34, (byte) 0xFF, (byte) 0xFF, (byte) 0xFF, (byte) 0xFF });
+        smartcardIO.login(new byte[] { 0x30, 0x30, 0x30, 0x30, (byte) 0xFF, (byte) 0xFF, (byte) 0xFF, (byte) 0xFF });
     }
 
     public void teardown() {

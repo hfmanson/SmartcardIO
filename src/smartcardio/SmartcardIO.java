@@ -14,6 +14,7 @@ import javax.smartcardio.TerminalFactory;
 public class SmartcardIO {
     public boolean debug = false;
     public static final int SW_NO_ERROR = 0x9000;
+    private CardTerminal terminal;
     private Card card;
     private CardChannel cardChannel;
 
@@ -59,34 +60,69 @@ public class SmartcardIO {
         return runAPDU(new CommandAPDU(0x00, 0x84, 0x00, 0x00, 0x10));
     }
 
-    public void setup() throws CardException {
+    public List<CardTerminal> listTerminals() throws CardException {
         // Display the list of terminals
         TerminalFactory factory = TerminalFactory.getDefault();
         List<CardTerminal> terminals = factory.terminals().list();
         if (debug) {
             System.out.println("Terminals: " + terminals);
         }
-        if (terminals.size() > 0) {
-            // Use the first terminal
-            CardTerminal terminal = terminals.get(0);
-            if (debug) {
-                System.out.println("Waiting for card presence...");
-            }
+        return terminals;
+    }
+
+    public void setup(CardTerminal terminal) throws CardException {
+        this.terminal = terminal;
+        //System.out.println(terminal.getName());
+        //if (debug) {
+            System.out.println("Waiting for card presence...");
+        //}
+        terminal.waitForCardPresent(0);
+        // Connect wit the card
+        card = terminal.connect("*");
+        if (debug) {
+            System.out.print("card: " + card + ", ATR: ");
+            Util.printHex(card.getATR().getBytes());
+            //System.out.print(", Historical: ");
+            //Util.printHex(card.getATR().getHistoricalBytes());
+            System.out.println();
+        }
+        cardChannel = card.getBasicChannel();
+    }
+
+    public void waitForCardPresent() {
+        try {
             terminal.waitForCardPresent(0);
-            // Connect wit hthe card
-            card = terminal.connect("*");
-            if (debug) {
-                System.out.print("card: " + card + ", ATR: ");
-                Util.printHex(card.getATR().getBytes());
-                //System.out.print(", Historical: ");
-                //Util.printHex(card.getATR().getHistoricalBytes());
-                System.out.println();
-            }
-            cardChannel = card.getBasicChannel();
+        } catch (CardException ex) {
+        }
+    }
+
+    public void waitForCardAbsent() {
+        try {
+            terminal.waitForCardAbsent(0);
+        } catch (CardException ex) {
+        }
+    }
+
+    public void setup(int terminalNumber) throws CardException {
+        List<CardTerminal> terminals = listTerminals();
+        if (terminals.size() > terminalNumber) {
+            CardTerminal terminal = terminals.get(terminalNumber);
+            setup(terminal);
         } else {
-            System.err.println("No terminals");
+            System.err.println("No terminal with number " + terminalNumber);
             System.exit(1);
         }
+    }
+
+    public void setup(String terminalName) throws CardException {
+        TerminalFactory factory = TerminalFactory.getDefault();
+        factory.terminals().getTerminal(terminalName);
+        CardTerminal terminal = factory.terminals().getTerminal(terminalName);
+        setup(terminal);
+    }
+
+    public void setup() throws CardException {
+        setup(0);
     }
 
     public void teardown() {
@@ -124,8 +160,10 @@ public class SmartcardIO {
 
     public void readRecords() throws CardException {
         int record = 1;
-        while (readRecord(record++) != null) {
-        }
+        ResponseAPDU responseAPDU;
+        do {
+            responseAPDU = readRecord(record++);
+        } while (responseAPDU != null && responseAPDU.getSW() == 0x9000);
     }
 
     public void updateRecord(int record, byte[] data) throws CardException {

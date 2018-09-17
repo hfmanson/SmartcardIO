@@ -1,29 +1,20 @@
 package smartcardio;
 
 import java.io.IOException;
-import java.security.InvalidKeyException;
-import java.security.Key;
 import java.security.KeyStore;
 import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
 import java.security.Provider;
-import java.security.PublicKey;
 import java.security.SecureRandom;
 import java.security.Security;
-import java.security.Signature;
-import java.security.SignatureException;
-import java.security.UnrecoverableKeyException;
 import java.security.cert.Certificate;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
-import java.security.interfaces.RSAPrivateKey;
-import java.security.interfaces.RSAPublicKey;
 import java.util.Enumeration;
 import java.util.List;
 import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import javax.xml.bind.DatatypeConverter;
 
 public class SimProvider extends Provider {
     public SimProvider() {
@@ -83,7 +74,7 @@ public class SimProvider extends Provider {
                 Certificate certificate = ks.getCertificate(alias);
                 X509Certificate x509 = (X509Certificate) certificate;
                 byte[] thumbprint = LoyalityCard.getThumbprint(x509);
-                String digestHex = DatatypeConverter.printHexBinary(thumbprint);
+                String digestHex = Util.ByteArrayToHexString(thumbprint);
                 System.out.println(digestHex);
                 System.out.println(certificate.getPublicKey());
             }
