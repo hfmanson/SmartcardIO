@@ -148,12 +148,18 @@ public class KeystoreTest {
         }
     }
 
-    public static void testSign(String keyName, String algorithm, byte[] data) throws InvalidKeyException, SignatureException {
-        try {
-            KeyStore ks = KeyStore.getInstance("PKCS12");
-            File f = new File("c:\\Users\\hfman\\Documents\\surfnet\\mansoft-ca.p12");
-            InputStream is = new FileInputStream(f);
+    public static KeyStore getKeyStore() throws Exception{
+        KeyStore ks = KeyStore.getInstance(KeyStore.getDefaultType());
+        File f = new File("mansoft-ca.p12");
+        try (InputStream is = new FileInputStream(f)) {
             ks.load(is, PASSWORD);
+        }
+        return ks;
+    }
+
+    public static void testSign(String keyName, String algorithm, byte[] data) throws Exception {
+        try {
+            KeyStore ks = getKeyStore();
             PrivateKey key;
             if (keyName.equals("rsa2048")) {
                 RSAPrivateKey rsakey = (RSAPrivateKey) ks.getKey(keyName, new char [] { '1', '6', '8', '5', '1', '7', '5', '0' });
@@ -182,49 +188,50 @@ public class KeystoreTest {
             Logger.getLogger(KeystoreTest.class.getName()).log(Level.SEVERE, null, ex);
         }
     }
-    public static void testEncrypt(byte[] data) {
+    public static byte[] testEncrypt(Certificate certificate, byte[] data) {
+        byte[] encrypted = null;
         try {
             System.out.println("data length: " + data.length);
-            Certificate slot1 = getCertificateFromFileName("slot1.cer");
-            PublicKey pubkey = slot1.getPublicKey();
+            PublicKey pubkey = certificate.getPublicKey();
             String algorithm = pubkey.getAlgorithm();
             System.out.println("algorithm: " + algorithm);
             Cipher cipher = Cipher.getInstance(algorithm);
             cipher.init(Cipher.ENCRYPT_MODE, pubkey);
-            byte[] encrypted = cipher.doFinal(data);
+            encrypted = cipher.doFinal(data);
             System.out.println("encrypted length: " + encrypted.length);
             System.out.println("encrypted: " + ByteArrayToHexString(encrypted));
-        } catch (CertificateException ex) {
-            Logger.getLogger(KeystoreTest.class.getName()).log(Level.SEVERE, null, ex);
-        } catch (IOException ex) {
-            Logger.getLogger(KeystoreTest.class.getName()).log(Level.SEVERE, null, ex);
-        } catch (NoSuchAlgorithmException ex) {
-            Logger.getLogger(KeystoreTest.class.getName()).log(Level.SEVERE, null, ex);
-        } catch (NoSuchPaddingException ex) {
-            Logger.getLogger(KeystoreTest.class.getName()).log(Level.SEVERE, null, ex);
-        } catch (InvalidKeyException ex) {
-            Logger.getLogger(KeystoreTest.class.getName()).log(Level.SEVERE, null, ex);
-        } catch (IllegalBlockSizeException ex) {
-            Logger.getLogger(KeystoreTest.class.getName()).log(Level.SEVERE, null, ex);
-        } catch (BadPaddingException ex) {
-            Logger.getLogger(KeystoreTest.class.getName()).log(Level.SEVERE, null, ex);
+        } catch (Exception ex) {
+            System.err.println(ex.getMessage());
         }
+        return encrypted;
     }
 
+    public static byte[] testDecrypt(PrivateKey privatekey, byte[] encrypted) throws Exception {
+        System.out.println("testDecrypt");
 
-//received random bytes: CCEED8FBAEB9E08F556582D2C6BAB4AE40D9565538BD9B78DA75B107C3AE1F89257F41EE7598DA240332807953C9419E16FFBCF0FF7FB6475C87BAD45E079F9F381C7BE27611095183FF0ABC1A94FDC57C0080E7671E0CD450922A5FCAB99D8D79BEAA2BDAAF6878B90298EBFB9F9B4B14B62C82FE39CB043E4FEF65A334258B
-//signature2: 303C021C63F69D161456169AE4FD96B8D74A928556DB5F79DC4BDAC28C4EF6B9021C3E641089F4A61EA295CFF5446795BCD060AAF7E6EBE9D6518B6DB6A7
+        String algorithm = privatekey.getAlgorithm();
+        System.out.println("Private key algorithm: " + algorithm);
+        Cipher decryptCipher = Cipher.getInstance(algorithm);
+        decryptCipher.init(Cipher.DECRYPT_MODE, privatekey);
+        byte[] decrypted = decryptCipher.doFinal(encrypted);
+        System.out.println("decrypted: " + ByteArrayToHexString(decrypted));
+        return decrypted;
+    }
 
-
-// SIM 923
-//challenge: 48454E5249
-//signature: 1A77F2DA7B6D30517822BED756D0CA046A253AF6BCEA865E13CB9AF9CA1C68B5D4FE392AB7D29FF30C0F52E63521A0CAC9A98F61F023FF48178325139301B5CF76393A44AC061775C46DE72EAB8D926EFBB616B2F5FC2EF0A66287F3D5419C93309B4125F6876B5984B702F301C86EEEB77A64E7D3D985DB2001D61976AF4911E36FDD83814B3169625AA2728646015BEE8EAB05A23955D8BFAC79910B3267A651B81740BA64DF09000467D7C360E66984BE09B79A29E6E26C0F7CA8C07FC3DA92FBB9FFE87601AA60E6AAB81ADB0BBFD9EF6BB6F3F726049FA7C1C579401BAAB34149DD7AD526E8EA63907C9B1C728B174415EF82CBA07B8CB1DC504DDBB106
-
-
-// DAC511FB48CB611577EDC6B5CCDBC41E477BE73E0DB17210FD991488BE7A47969BF9BBACFA6B51C325E160AEA06AFEB7558F69F378E541385FB2153E384EB8FA11339FA3113299200749D1C3000A20B59E4476542DED8ED04992A2801937CC820BCBAE7F49A00EE1A6E2F8C7C4111D7B4FE48A27630D02EDB496B6AB7BF65B7CB564FBBE3D8437EBCFBF429A11ED864B2FEE094E
-    public static void main(String[] args) throws SignatureException, InvalidKeyException, KeyStoreException, IOException, FileNotFoundException, NoSuchAlgorithmException, CertificateException, NoSuchProviderException, CardException {
-        testEncrypt(new byte[256]);
-        testEncrypt(HexStringToByteArray("DAC511FB48CB611577EDC6B5CCDBC41E477BE73E0DB17210FD991488BE7A47969BF9BBACFA6B51C325E160AEA06AFEB7558F69F378E541385FB2153E384EB8FA11339FA3113299200749D1C3000A20B59E4476542DED8ED04992A2801937CC820BCBAE7F49A00EE1A6E2F8C7C4111D7B4FE48A27630D02EDB496B6AB7BF65B7CB564FBBE3D8437EBCFBF429A11ED864B2FEE094E"));
+    public static void testCipher(String alias) {
+        try {
+            KeyStore ks = getKeyStore();
+            Certificate slot2 = ks.getCertificate(alias);
+            byte[] encrypted = testEncrypt(slot2, new byte[] { 1, 2, 3, 4} );
+            //encrypted[10] = 10;
+            PrivateKey privatekey = (PrivateKey) ks.getKey(alias, new char [] { '1', '6', '8', '5', '1', '7', '5', '0' });
+            testDecrypt(privatekey, encrypted);
+        } catch (Exception ex) {
+            System.err.println(ex.getMessage());
+        }
+    }
+    public static void testSignature() {
+        try {
         Certificate sim5 = getCertificateFromKeystore("sim5");
         checksignature(sim5, CHALLENGE, SIGNATURE, "NONEwithRSA");
         Certificate slot2 = getCertificateFromFileName("slot2.cer");
@@ -239,7 +246,17 @@ public class KeystoreTest {
                 HexStringToByteArray("48454E5249"),
                 HexStringToByteArray("32076C8C4A82DE43033DEF40723F6362D4FDA7E70B22DB1B80049AC08303D5FA806422A8156B1E06E635B61EE5BEFE7CDCB0838D7769C3B706BE2611F31C7A93C8D6700459FFA7C67202EF9F9FBB8EA4AAB644A7D5E42E5ACCAFA41A9053AB96B3E72D102C9AC00AD454B5B596EEDDEDDEB8E41A1CEEDFF280DCCE416D51574FABC801107AEBD53F5DAB3830DC4DD20630D7F0075F2F8C8742E37614264BD843295CB258DF8022439BF106F9F0D8A889D56E4E8DD9C7FE169D417E61140EB20824AC507BA20D785F8C4BF72527C6FD85346DD2BFB87E080FB851B2D9214D5EDFB61A375C763E2E0A5BC14B88D1C5FE4489BBEA1288DB448ECAE53912151D49BF"),
                 "NONEwithRSA");
+        } catch (Exception ex) {
+            System.err.println(ex.getMessage());
+        }
         //testSign("rsa2048", "NONEwithRSA", new byte[] { 5, 6, 7, 8 });
         //testSign("dsa2048", "SHA256withDSA", new byte[128]);
+    }
+
+
+    public static void main(String[] args) throws Exception {
+        //Certificate slot1 = getCertificateFromFileName("slot1.cer");
+        //testEncrypt(slot1, new byte[256]);
+        testCipher("mansoft-ca");
     }
 }
