@@ -24,11 +24,15 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.security.InvalidKeyException;
 import java.security.KeyStore;
+import java.security.KeyStoreException;
 import java.security.PrivateKey;
 import java.security.SecureRandom;
 import java.security.Signature;
 import java.security.SignatureException;
+import java.security.cert.Certificate;
 import java.util.Arrays;
+import java.util.Enumeration;
+import java.util.HashMap;
 import static keystore.KeystoreTest.PASSWORD;
 
 public class LoyalityCard {
@@ -103,6 +107,24 @@ public class LoyalityCard {
         return ks;
     }
 
+    private static HashMap<Fingerprint, X509Certificate> certificateMap;
+
+    private static void createCertificateMap(KeyStore ks) throws Exception {
+        certificateMap = new HashMap<>();
+        Enumeration<String> aliases = ks.aliases();
+        while (aliases.hasMoreElements()) {
+            String alias = aliases.nextElement();
+            System.out.println("alias: " + alias);
+            System.out.println("********************************************************");
+            Certificate certificate = ks.getCertificate(alias);
+            X509Certificate x509 = (X509Certificate) certificate;
+            byte[] fingerprint = getThumbprint(x509);
+            certificateMap.put(new Fingerprint(fingerprint), x509);
+            System.out.println("fingerprint:  " + Util.ByteArrayToHexString(fingerprint));
+            System.out.println("********************************************************");
+        }
+    }
+
     public static void main(String[] args) {
         try {
             SmartcardIO smartcardIO = new SmartcardIO();
@@ -111,29 +133,26 @@ public class LoyalityCard {
                 List<CardTerminal> terminals = smartcardIO.listTerminals();
                 System.out.println("Terminals: " + terminals);
                 System.exit(0);
-            } else if (args.length < 3) {
-                System.err.println("Usage: java smartcardio.LoyalityCard <keystore filename> <slot alias> <sim alias> [terminal name]\n\te.g. java smartcardio.LoyalityCard slot1.p12 slot1 sim5");
+            } else if (args.length < 2) {
+                System.err.println("Usage: java smartcardio.LoyalityCard <keystore filename> <slot alias> [terminal name]\n\te.g. java smartcardio.LoyalityCard slot1.p12 slot1");
                 System.exit(1);
             }
+
             KeyStore ks = getKeyStore(args[0], PASSWORD);
+            createCertificateMap(ks);
             X509Certificate slot = (X509Certificate) ks.getCertificate(args[1]);
-            X509Certificate sim = (X509Certificate) ks.getCertificate(args[2]);
 
             byte[] slotFingerprint = getThumbprint(slot);
-            byte[] keyFingerprint = getThumbprint(sim);
             System.out.println("slot sig alg: " + slot.getSigAlgName());
             System.out.println("slot fingerprint: " + Util.ByteArrayToHexString(slotFingerprint));
-            System.out.println("key issuer: " + sim.getIssuerDN().getName());
-            System.out.println("key subject: " + sim.getSubjectDN().getName());
-            System.out.println("key fingerprint: " + Util.ByteArrayToHexString(keyFingerprint));
             GpioPinDigitalOutput pin = null;
             if (isRaspberry()) {
                 pin = setupGpio();
             }
             while (true) {
                 try {
-                    if (args.length > 3) {
-                        String terminalName = args[3];
+                    if (args.length > 2) {
+                        String terminalName = args[2];
                         smartcardIO.setup(terminalName);
                     } else {
                         smartcardIO.setup();
@@ -144,14 +163,19 @@ public class LoyalityCard {
                         System.out.println("received encrypted data: " + Util.ByteArrayToHexString(encrypteddata));
                         byte[] data = encrypteddata;
                         byte[] receivedKeyFingerprint = Arrays.copyOfRange(data, 0, FINGERPRINT_LENGTH);
-                        System.out.println("received key fingerprint: " + Util.ByteArrayToHexString(receivedKeyFingerprint));
                         byte[] random = Arrays.copyOfRange(data, FINGERPRINT_LENGTH, data.length);
                         System.out.println("received random bytes: " + Util.ByteArrayToHexString(random));
 
                         byte[] slotSignature = signChallenge((PrivateKey) ks.getKey(args[1], PASSWORD), random);
                         System.out.println("slot signature: " + Util.ByteArrayToHexString(slotSignature));
-                        if (Arrays.equals(receivedKeyFingerprint, keyFingerprint)) {
-                            System.out.println("Key fingerprint OK!");
+                        System.out.println("received key fingerprint: " + Util.ByteArrayToHexString(receivedKeyFingerprint));
+                        X509Certificate keycert = certificateMap.get(new Fingerprint(receivedKeyFingerprint));
+                        if (keycert == null) {
+                            System.out.println("Key not found in keystore");
+                        } else {
+                            System.out.println("key alias: " + ks.getCertificateAlias(keycert));
+                            System.out.println("key issuer: " + keycert.getIssuerDN().getName());
+                            System.out.println("key subject: " + keycert.getSubjectDN().getName());
                             SecureRandom secureRandom = new SecureRandom();
                             byte challenge[] = new byte[128];
                             secureRandom.nextBytes(challenge);
@@ -160,7 +184,7 @@ public class LoyalityCard {
                             if (signature != null) {
                                 System.out.println("signature: " + Util.ByteArrayToHexString(signature));
                                 Signature sig = Signature.getInstance("NONEwithRSA");
-                                sig.initVerify(sim);
+                                sig.initVerify(keycert);
                                 sig.update(challenge);
                                 boolean responseOK = sig.verify(signature);
 
