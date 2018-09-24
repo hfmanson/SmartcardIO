@@ -20,15 +20,17 @@ public class Joost {
 
 
     public static void main(String[] args) {
-        SmartcardIO smartcardIO = new SmartcardIO();
-        smartcardIO.debug = true;
+        SmartcardIO smartcardIO = null;
         try {
-            smartcardIO.setup();
+            smartcardIO = SmartcardIO.getInstance();
+            smartcardIO.debug = true;
             joost(smartcardIO);
         } catch (Exception e) {
             System.err.println("Ouch: " + e.toString());
         } finally {
-            smartcardIO.teardown();
+            if (smartcardIO != null) {
+                smartcardIO.teardown();
+            }
         }
     }
 }

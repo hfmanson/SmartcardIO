@@ -1,5 +1,31 @@
 package smartcardio;
 
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.io.InputStream;
+import java.security.InvalidKeyException;
+import java.security.Key;
+import java.security.KeyManagementException;
+import java.security.KeyStore;
+import java.security.KeyStoreException;
+import java.security.NoSuchAlgorithmException;
+import java.security.PrivateKey;
+import java.security.Provider;
+import java.security.Security;
+import java.security.Signature;
+import java.security.SignatureException;
+import java.security.UnrecoverableKeyException;
+import java.security.cert.CertificateException;
+import java.security.cert.CertificateFactory;
+import java.security.cert.X509Certificate;
+import java.security.interfaces.RSAPrivateKey;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+import javax.net.ssl.KeyManagerFactory;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLSocketFactory;
 import javax.smartcardio.CardException;
 import javax.smartcardio.CommandAPDU;
 import javax.smartcardio.ResponseAPDU;
@@ -9,6 +35,7 @@ public class Priegel {
     public final static byte[] AID_JOOSTAPPLET = { (byte) 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x01 };
     public final static byte[] AID_3GPP = { (byte) 0xA0, 0x00, 0x00, 0x00, (byte) 0x87 };
     public final static byte[] AID_M4M = { (byte) 0xA0, 0x00, 0x00, 0x03, (byte) 0x96, 0x4D, 0x34, 0x4D };
+    public static final char[] PASSWORD = new char[] { 'h', 'e', 'n', 'r', 'i', '1', '2', '3', '4' };
 
     /**
      * Utility method to convert a byte array to a hexadecimal string.
@@ -138,18 +165,76 @@ public class Priegel {
             }
         }
     }
+    public static X509Certificate CertificateFromFileName(String fileName) throws FileNotFoundException, CertificateException, IOException {
+        X509Certificate result;
+        try (FileInputStream is = new FileInputStream(fileName)) {
+            CertificateFactory certificateFactory = CertificateFactory.getInstance("X.509");
+            result = (X509Certificate) certificateFactory.generateCertificate(is);
+        }
+        return result;
+    }
 
 
+    public static void signTest() throws KeyStoreException, NoSuchAlgorithmException, UnrecoverableKeyException, InvalidKeyException, SignatureException, FileNotFoundException, IOException, CertificateException {
+        KeyStore ks = KeyStore.getInstance("PKCS12");
+        File f = new File("c:\\Users\\hfman\\Documents\\surfnet\\mansoft-ca.p12");
+        InputStream is = new FileInputStream(f);
+        ks.load(is, PASSWORD);
+        PrivateKey privatekey = (PrivateKey) ks.getKey("secret", PASSWORD);
+        System.out.println(privatekey);
+        Signature s = Signature.getInstance("SHA256withDSA");
+        s.initSign(privatekey);
+        //byte buf[] = new byte[] { 0x48, 0x45, 0x4e, 0x52, 0x49 };
+        byte buf[] = new byte[256];
+        s.update(buf);
+        byte[] signature = s.sign();
+        System.out.println("signature size: " + signature.length);
+        System.out.println("signature: " + Util.ByteArrayToHexString(signature));
+    }
+
+    public static void hwKeyStore(String configName, char pin[]) {
+        try {
+            Provider p = new sun.security.pkcs11.SunPKCS11(configName);
+            Security.addProvider(p);
+            KeyStore ks = KeyStore.getInstance("PKCS11");
+            ks.load(null, pin);
+            PrivateKey privatekey = (PrivateKey) ks.getKey("sim923", null);
+            String algorithm = privatekey.getAlgorithm();
+            System.out.println("Private key algorithm: " + algorithm);
+        } catch (KeyStoreException ex) {
+            Logger.getLogger(TestSSL.class.getName()).log(Level.SEVERE, null, ex);
+        } catch (IOException ex) {
+            Logger.getLogger(TestSSL.class.getName()).log(Level.SEVERE, null, ex);
+        } catch (NoSuchAlgorithmException ex) {
+            Logger.getLogger(TestSSL.class.getName()).log(Level.SEVERE, null, ex);
+        } catch (CertificateException ex) {
+            Logger.getLogger(TestSSL.class.getName()).log(Level.SEVERE, null, ex);
+        } catch (UnrecoverableKeyException ex) {
+            Logger.getLogger(Priegel.class.getName()).log(Level.SEVERE, null, ex);
+        }
+    }
+
+    public static void testHwKeyStore(String[] args) {
+        if (args.length != 2) {
+            System.err.println("Usage: java smartcardio.Priegel <PKCS11 config file> <keystore password>");
+            System.exit(1);
+        }
+        final String configName = args[0];
+        final char password[] = args[1].toCharArray();
+        hwKeyStore(configName, password);
+    }
 
     public static void main(String[] args) {
         try {
-            SmartcardIO smartcardIO = new SmartcardIO();
-            smartcardIO.debug = true;
-            smartcardIO.setup();
-            challengeTest(smartcardIO);
-            smartcardIO.teardown();
+//            SmartcardIO smartcardIO = new SmartcardIO();
+//            smartcardIO.debug = true;
+//            smartcardIO.setup();
+            //challengeTest(smartcardIO);
+            //signTest();
+            testHwKeyStore(args);
+//            smartcardIO.teardown();
         } catch (Exception e) {
-            System.err.println("Ouch: " + e.toString());
+            e.printStackTrace();
         }
     }
 

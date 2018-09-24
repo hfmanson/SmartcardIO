@@ -17,6 +17,28 @@ public class SmartcardIO {
     private CardTerminal terminal;
     private Card card;
     private CardChannel cardChannel;
+    private static SmartcardIO smartcardIO;
+    private static final int MAX_PAYLOAD_SIZE = 0xF0;
+    private static final int CLA_CHAINING_MASK = 0x10;
+
+    public static SmartcardIO getInstance() throws CardException {
+        if (smartcardIO == null) {
+            try {
+                smartcardIO = new SmartcardIO();
+                smartcardIO.debug = true;
+                String reader = System.getProperty("smartcardio.reader");
+                if (reader == null) {
+                    smartcardIO.setup();
+                } else {
+                    smartcardIO.setup(reader);
+                }
+            } catch (CardException ex) {
+                Logger.getLogger(SmartcardIO.class.getName()).log(Level.SEVERE, null, ex);
+                smartcardIO = null;
+            }
+        }
+        return smartcardIO;
+    }
 
     public static byte hi(int x) {
         return (byte) (x >> 8);
@@ -50,6 +72,24 @@ public class SmartcardIO {
             System.out.println("ERROR: status: " + String.format("%04X", status));
         }
         return answer;
+    }
+    public ResponseAPDU runAPDU1(CommandAPDU command) throws CardException {
+        int payloadSize = command.getNc();
+        int offset = 0;
+        int cla = command.getCLA();
+        int ins = command.getINS();
+        int p1 = command.getP1();
+        int p2 = command.getP2();
+        byte[] data = command.getData();
+        int ne = command.getNe();
+        while (payloadSize > MAX_PAYLOAD_SIZE) {
+            CommandAPDU chainCommand = new CommandAPDU(cla | CLA_CHAINING_MASK, ins, p1, p2, data, offset, MAX_PAYLOAD_SIZE, ne);
+            runAPDU(chainCommand);
+            offset += MAX_PAYLOAD_SIZE;
+            payloadSize -= MAX_PAYLOAD_SIZE;
+        }
+        CommandAPDU finalCommand = new CommandAPDU(cla, ins, p1, p2, data, offset, payloadSize, ne);
+        return runAPDU(finalCommand);
     }
 
     public ResponseAPDU login(byte[] password) throws CardException {

@@ -19,10 +19,17 @@ import com.pi4j.io.gpio.GpioFactory;
 import com.pi4j.io.gpio.GpioPinDigitalOutput;
 import com.pi4j.io.gpio.PinState;
 import com.pi4j.io.gpio.RaspiPin;
+import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
+import java.security.InvalidKeyException;
+import java.security.KeyStore;
+import java.security.PrivateKey;
 import java.security.SecureRandom;
+import java.security.Signature;
+import java.security.SignatureException;
 import java.util.Arrays;
-import javax.crypto.Cipher;
+import static keystore.KeystoreTest.PASSWORD;
 
 public class LoyalityCard {
     public final static byte[] AID_LOYALTY_CARD_AID = { (byte) 0xF2, (byte) 0x22, (byte) 0x22, (byte) 0x22, (byte) 0x22 };
@@ -39,26 +46,19 @@ public class LoyalityCard {
         return rapdu;
     }
 
-    public static byte[] challenge(SmartcardIO smartcardIO, byte[] challenge) throws CardException {
+    public static byte[] sign(SmartcardIO smartcardIO, byte[] challenge, byte[] slotSignature) throws CardException {
         byte[] signature = null;
+        int payloadLength = challenge.length + slotSignature.length;
+        byte[] payload = new byte[payloadLength];
+        System.arraycopy(challenge, 0, payload, 0, challenge.length);
+        System.arraycopy(slotSignature, 0, payload, challenge.length, slotSignature.length);
         CommandAPDU c = new CommandAPDU(0x00, 0xA4, 0x04, 0x00, AID_LOYALTY_CARD_AID);
         ResponseAPDU rapdu = smartcardIO.runAPDU(c);
         if (rapdu.getSW() == 0x9000) {
-            c = new CommandAPDU(0x00, 0x56, 0x00, 0x00, challenge, 0x80);
-            rapdu = smartcardIO.runAPDU(c);
-            byte[] signatureLow = rapdu.getData();
-            //System.out.println("sig1: " + Util.ByteArrayToHexString(signatureLow));
-            if (rapdu.getSW() == 0x9000) {
-                c = new CommandAPDU(0x00, 0x57, 0x00, 0x80, new byte[] { }, 0x80);
-                rapdu = smartcardIO.runAPDU(c);
-                if (rapdu.getSW() == 0x9000) {
-                    byte[] signatureHigh = rapdu.getData();
-                    //System.out.println("sig2: " + Util.ByteArrayToHexString(signatureHigh));
-                    signature = new byte[0x100];
-                    System.arraycopy(signatureLow, 0, signature, 0, 0x80);
-                    System.arraycopy(signatureHigh, 0, signature, 0x80, 0x80);
-                }
-            }
+            System.out.println("payload length: " + payloadLength);
+            c = new CommandAPDU(0x00, 0x56, 0x00, 0x00, payload, 0x80);
+            rapdu = smartcardIO.runAPDU1(c);
+            signature = rapdu.getData();
         }
         return signature;
     }
@@ -87,11 +87,18 @@ public class LoyalityCard {
         return result;
     }
 
+    public static byte[] signChallenge(PrivateKey key, byte[] challenge) throws NoSuchAlgorithmException, InvalidKeyException, SignatureException {
+        Signature sig = Signature.getInstance("SHA256withRSA");
+        sig.initSign(key);
+        sig.update(challenge);
+        return sig.sign();
+    }
+
     public static void main(String[] args) {
 
         try {
             SmartcardIO smartcardIO = new SmartcardIO();
-            smartcardIO.debug = false;
+            smartcardIO.debug = true;
             if (args.length == 0) {
                 List<CardTerminal> terminals = smartcardIO.listTerminals();
                 System.out.println("Terminals: " + terminals);
@@ -102,6 +109,7 @@ public class LoyalityCard {
 
             byte[] slotFingerprint = getThumbprint(slot);
             byte[] keyFingerprint = getThumbprint(sim);
+            System.out.println("slot sig alg: " + slot.getSigAlgName());
             System.out.println("slot fingerprint: " + Util.ByteArrayToHexString(slotFingerprint));
             System.out.println("key issuer: " + sim.getIssuerDN().getName());
             System.out.println("key subject: " + sim.getSubjectDN().getName());
@@ -120,34 +128,42 @@ public class LoyalityCard {
                     }
                     ResponseAPDU rapdu = readCard(smartcardIO, slotFingerprint);
                     if (rapdu.getSW() == 0x9000) {
-                        byte[] data = rapdu.getData();
-                        System.out.println("received data: " + Util.ByteArrayToHexString(data));
+                        byte[] encrypteddata = rapdu.getData();
+                        System.out.println("received encrypted data: " + Util.ByteArrayToHexString(encrypteddata));
+                        byte[] data = encrypteddata;
                         byte[] receivedKeyFingerprint = Arrays.copyOfRange(data, 0, FINGERPRINT_LENGTH);
                         System.out.println("received key fingerprint: " + Util.ByteArrayToHexString(receivedKeyFingerprint));
                         byte[] random = Arrays.copyOfRange(data, FINGERPRINT_LENGTH, data.length);
                         System.out.println("received random bytes: " + Util.ByteArrayToHexString(random));
+                        KeyStore ks = KeyStore.getInstance("PKCS12");
+                        File f = new File("slot1.p12");
+                        InputStream is = new FileInputStream(f);
+                        ks.load(is, PASSWORD);
+
+                        byte[] slotSignature = signChallenge((PrivateKey) ks.getKey("slot1", PASSWORD), random);
+                        System.out.println("slot signature: " + Util.ByteArrayToHexString(slotSignature));
                         if (Arrays.equals(receivedKeyFingerprint, keyFingerprint)) {
                             System.out.println("Key fingerprint OK!");
-                            //byte[] challenge = Util.HexStringToByteArray("3051300D060960864801650304020305000440FC936E9CE8B5250339585207FE555300FA2428F8CCCD3A28C704ED3D332D6565BDF440427BBE4E0F2EA9ED3268CE537ABD56434D0B930BDF72064518CD8DD825");
                             SecureRandom secureRandom = new SecureRandom();
                             byte challenge[] = new byte[128];
                             secureRandom.nextBytes(challenge);
                             System.out.println("challenge: " + Util.ByteArrayToHexString(challenge));
-                            byte[] signature = challenge(smartcardIO, challenge);
+                            byte[] signature = sign(smartcardIO, challenge, slotSignature);
                             if (signature != null) {
                                 System.out.println("signature: " + Util.ByteArrayToHexString(signature));
-                                Cipher cipher = Cipher.getInstance("RSA");
-                                cipher.init(Cipher.DECRYPT_MODE, sim);
-                                byte[] result = cipher.doFinal(signature);
-                                System.out.println("result.length = " + result.length);
-                                //System.out.println(Util.ByteArrayToHexString(result));
-                                boolean responseOK = Arrays.equals(result, challenge);
+                                Signature sig = Signature.getInstance("NONEwithRSA");
+                                sig.initVerify(sim);
+                                sig.update(challenge);
+                                boolean responseOK = sig.verify(signature);
+
                                 System.out.println(responseOK ? "challenge/response OK" : "Invalid");
                                 if (responseOK) {
                                     if (pin != null) {
                                         pin.pulse(1000, true); // set second argument to 'true' use a blocking call
                                     }
                                 }
+                            } else {
+                                System.out.println("signature is null!");
                             }
                         }
                     }
