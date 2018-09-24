@@ -94,8 +94,16 @@ public class LoyalityCard {
         return sig.sign();
     }
 
-    public static void main(String[] args) {
+    public static KeyStore getKeyStore(String keyStoreFile, char[] password) throws Exception {
+        KeyStore ks = KeyStore.getInstance(KeyStore.getDefaultType());
+        File f = new File(keyStoreFile);
+        try (InputStream is = new FileInputStream(f)) {
+            ks.load(is, password);
+        }
+        return ks;
+    }
 
+    public static void main(String[] args) {
         try {
             SmartcardIO smartcardIO = new SmartcardIO();
             smartcardIO.debug = true;
@@ -103,9 +111,13 @@ public class LoyalityCard {
                 List<CardTerminal> terminals = smartcardIO.listTerminals();
                 System.out.println("Terminals: " + terminals);
                 System.exit(0);
+            } else if (args.length < 3) {
+                System.err.println("Usage: java smartcardio.LoyalityCard <keystore filename> <slot alias> <sim alias> [terminal name]\n\te.g. java smartcardio.LoyalityCard slot1.p12 slot1 sim5");
+                System.exit(1);
             }
-            X509Certificate slot = CertificateFromFileName(args[0]);
-            X509Certificate sim = CertificateFromFileName(args[1]);
+            KeyStore ks = getKeyStore(args[0], PASSWORD);
+            X509Certificate slot = (X509Certificate) ks.getCertificate(args[1]);
+            X509Certificate sim = (X509Certificate) ks.getCertificate(args[2]);
 
             byte[] slotFingerprint = getThumbprint(slot);
             byte[] keyFingerprint = getThumbprint(sim);
@@ -120,8 +132,8 @@ public class LoyalityCard {
             }
             while (true) {
                 try {
-                    if (args.length > 2) {
-                        String terminalName = args[2];
+                    if (args.length > 3) {
+                        String terminalName = args[3];
                         smartcardIO.setup(terminalName);
                     } else {
                         smartcardIO.setup();
@@ -135,12 +147,8 @@ public class LoyalityCard {
                         System.out.println("received key fingerprint: " + Util.ByteArrayToHexString(receivedKeyFingerprint));
                         byte[] random = Arrays.copyOfRange(data, FINGERPRINT_LENGTH, data.length);
                         System.out.println("received random bytes: " + Util.ByteArrayToHexString(random));
-                        KeyStore ks = KeyStore.getInstance("PKCS12");
-                        File f = new File("slot1.p12");
-                        InputStream is = new FileInputStream(f);
-                        ks.load(is, PASSWORD);
 
-                        byte[] slotSignature = signChallenge((PrivateKey) ks.getKey("slot1", PASSWORD), random);
+                        byte[] slotSignature = signChallenge((PrivateKey) ks.getKey(args[1], PASSWORD), random);
                         System.out.println("slot signature: " + Util.ByteArrayToHexString(slotSignature));
                         if (Arrays.equals(receivedKeyFingerprint, keyFingerprint)) {
                             System.out.println("Key fingerprint OK!");
